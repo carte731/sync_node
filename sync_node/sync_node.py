@@ -55,14 +55,19 @@ class sync_node(Node):
                 # directory already exists
                 pass
 
-            # Save your OpenCV2 image as a jpeg 
+            # Save your OpenCV2 image as a jpeg and pngs
             cv2.imwrite('/root/img_data/Output_' + str(self.imgCounter_) + '/camera_image.jpeg', rgbcv2_img)
             cv2.imwrite('/root/img_data/Output_' + str(self.imgCounter_) + '/depth_image.png', rgbDcv2_image)
             cv2.imwrite('/root/img_data/Output_' + str(self.imgCounter_) + '/aligned_image.png', alignedcv2_image)
 
+            # Saves YOLO message as a JSON and save it to a .json text file
             with open('/root/img_data/Output_' + str(self.imgCounter_) + '/trackOutput.json', 'a') as fileIO:
                 trackDict = message_to_ordereddict(yoloTrack)
                 json.dump(trackDict, fileIO, indent=5)
+            
+            # Creates an empty hidden text file, marking the directory and files safe to delete from cFS
+            with open('/root/img_data/Output_' + str(self.imgCounter_) + '/.safeToDelete.safe', 'w') as fileIO:
+                pass
 
             self.imgCounter_ += 1
 
