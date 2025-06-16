@@ -11,43 +11,68 @@ from cv_bridge import CvBridge, CvBridgeError
 from rosidl_runtime_py.convert import message_to_ordereddict
 from message_filters import Subscriber, ApproximateTimeSynchronizer 
 
+# For sending messages to JAXA-RACS2 ROS-cFS bridge
+from racs2_msg.msg import RACS2UserMsg
+
+config = "BRIDGE"
+
 class sync_node(Node):
     
     def __init__(self):
         super().__init__("sync_node")
 
+        if(config == "LOCAL"):
+            self.localPass()
+        elif(config == "BRIDGE"):
+            self.bridgePass()
+        else:
+            self.localPass()
+
+        self.get_logger().info("Sync-Node has started.")
+
+    # JAXA-Bridge 
+    def bridgePass(self):
+        # Subscribing to YOLO-ROS detections
+        self.sub_JaxaBridge_ = self.create_subscription(DetectionArray, "/yolo/detections_3d", self.bridgeCallBack, 20)
+        self.sub_JaxaBridge_
+
+        # Creating publisher for RACS2 outbound messages
+        self.pub_JaxaBridge_ = self.create_publisher(RACS2UserMsg, '/RACS2Bridge', 10)
+
+    # Local File-IO saving
+    def localPass(self):
         self.imgCounter_ = 0
         self.bridge_ = CvBridge()
 
         # Used for RealSense Camera D435
         self.rgbSubcription_ = Subscriber(self, Image, "/camera/camera/color/image_raw")
-        #self.rgbdSubcription_ = Subscriber(self, Image, "/camera/camera/depth/image_rect_raw")
-        self.rgbaSubcription_ = Subscriber(self, Image, "/camera/camera/aligned_depth_to_color/image_raw")
+        self.rgbdSubcription_ = Subscriber(self, Image, "/camera/camera/depth/image_rect_raw")
+        
+        # Used for YOLO detection
+        self.yoloTrackSub_ = Subscriber(self, DetectionArray, "/yolo/detections_3d")
 
-        # Used for simulating RGB and Depth cameras in Gazebo - 
-        # will functionalize with config/param file
+        # Used for simulating RGB and Depth cameras in Gazebo
         #self.rgbSubcription_ = Subscriber(self, Image, "/robot_0/rgb_camera")
         #self.rgbdSubcription_ = Subscriber(self, Image, "/robot_0/depth_camera")
 
-        # Used for YOLO object detection
-        #self.yoloTrackSub_ = Subscriber(self, DetectionArray, "/yolo/detections")
-        #self.yoloTrackSub_ = Subscriber(self, DetectionArray, "/yolo/tracking")
-        self.yoloTrackSub_ = Subscriber(self, DetectionArray, "/yolo/detections_3d")
-
-        # Used if the user would like to save the images with the YOLO bounding box - 
-        # will functionalize with config/param file
-        #self.yoloDebugImgSub_ = Subscriber(self, Image, "/yolo/dbg_image")
-
         # Syncs the subscriptions
-        #self.img_sync = ApproximateTimeSynchronizer([self.rgbSubcription_, self.rgbdSubcription_, self.rgbaSubcription_, self.yoloTrackSub_], 100, 0.1)
-        #self.img_sync = ApproximateTimeSynchronizer([self.rgbSubcription_, self.rgbdSubcription_, self.yoloTrackSub_], 100, 0.1)
-        self.img_sync = ApproximateTimeSynchronizer([self.rgbSubcription_, self.rgbaSubcription_, self.yoloTrackSub_], 100, 0.1)
+        self.img_sync = ApproximateTimeSynchronizer([self.rgbSubcription_, self.rgbdSubcription_, self.yoloTrackSub_], 100, 0.1)
         self.img_sync.registerCallback(self.imgSyncCallback)
 
-        self.get_logger().info("Sync-Node has started.")
+    def bridgeCallBack(self, msg):
+        # Creating a RACS2 message
+        outboungMsg = RACS2UserMsg()
+        
+        # Converting ROS2 message to JSON string
+        #detectionObject = message_to_ordereddict(msg)
+        #outboungMsg.body_data = json.dumps(detectionObject)
 
-    #def imgSyncCallback(self, rgbMsg, rgbDepthMsg, rgb_depth_AlignedMsg, yoloTrack):
-    #def imgSyncCallback(self, rgbMsg, rgbDepthMsg, yoloTrack):
+        outboungMsg.body_data = json.dumps(msg)
+
+        # Sending the JSON string of a ROS2 message to RACS2 bridge
+        self.pub_JaxaBridge_.publish(outboungMsg)
+        self.get_logger().info("Sync-Node publishing YOLO completed...")
+
     def imgSyncCallback(self, rgbMsg, rgb_depth_AlignedMsg, yoloTrack):
 
         # Used for filing naming
